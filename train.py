@@ -54,7 +54,13 @@ def train(args):
     else:
         # Default PPO model hyper-parameters give good results
         # TODO: Use dynamic learning rate
-        model = PPO("MlpPolicy", vec_env, verbose=1, tensorboard_log=LOG_DIR)
+        model = PPO(
+            "MlpPolicy",
+            vec_env,
+            verbose=1,
+            tensorboard_log=LOG_DIR,
+            device=args.device,
+        )
 
     model.learn(
         total_timesteps=args.total_timesteps,
@@ -125,7 +131,8 @@ def test(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run", type=str, required=True, choices=["train", "test"])
+    parser.add_argument("--run", type=str, required=True,
+                        choices=["train", "test"])
     parser.add_argument(
         "--run_name",
         type=str,
@@ -135,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_parallel_envs",
         type=int,
-        default=12,
+        default=24,
         help="Number of parallel environments while training",
     )
     parser.add_argument(
@@ -173,6 +180,12 @@ if __name__ == "__main__":
         choices=["torque", "position"],
         default="position",
         help="Whether the model should control the robot using torque or position control.",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to use for training (e.g., 'cuda', 'cuda:0', 'cpu').",
     )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
