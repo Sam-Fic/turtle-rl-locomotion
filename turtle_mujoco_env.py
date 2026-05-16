@@ -34,7 +34,7 @@ class TurtleMujocoEnv(MujocoEnv):
         MujocoEnv.__init__(
             self,
             model_path=model_path.absolute().as_posix(),
-            frame_skip=10,  # Perform an action every 10 frames (dt(=0.002) * 10 = 0.02 seconds -> 50hz action rate)
+            frame_skip=20,  # dt(=0.001) * 20 = 0.02 seconds -> 50Hz action rate
             observation_space=None,  # Manually set afterwards
             default_camera_config=DEFAULT_CAMERA_CONFIG,
             **kwargs,
@@ -78,9 +78,10 @@ class TurtleMujocoEnv(MujocoEnv):
         self._default_joint_position = np.array(self.model.key_ctrl[0])
 
         # vx (m/s), vy (m/s), wz (rad/s)
-        self._desired_velocity_min = np.array([0.5, -0.0, -0.0])
-        self._desired_velocity_max = np.array([0.5, 0.0, 0.0])
-        self._desired_velocity = self._sample_desired_vel()  # [0.5, 0.0, 0.0]
+        # Turtle: -Y direction is forward, +Y is backward
+        self._desired_velocity_min = np.array([0.0, -0.5, -0.0])
+        self._desired_velocity_max = np.array([0.0, -0.5, 0.0])
+        self._desired_velocity = self._sample_desired_vel()  # [0.0, -0.5, 0.0]
         self._obs_scale = {
             "linear_velocity": 2.0,
             "angular_velocity": 0.25,
@@ -90,14 +91,16 @@ class TurtleMujocoEnv(MujocoEnv):
         self._tracking_velocity_sigma = 0.25
 
         # Metrics used to determine if the episode should be terminated
-        self._healthy_z_range = (0.22, 0.65)
+        self._healthy_z_range = (0.08, 0.40)
         self._healthy_pitch_range = (-np.deg2rad(10), np.deg2rad(10))
         self._healthy_roll_range = (-np.deg2rad(10), np.deg2rad(10))
 
         self._feet_air_time = np.zeros(4)
         self._last_contacts = np.zeros(4)
-        self._cfrc_ext_feet_indices = [4, 7, 10, 13]  # 4:FR, 7:FL, 10:RR, 13:RL
-        self._cfrc_ext_contact_indices = [2, 3, 5, 6, 8, 9, 11, 12]
+        # Feet flippers (for landing reward): link3(4), link6(7), link8(9), link10(11)
+        self._cfrc_ext_feet_indices = [4, 7, 9, 11]
+        # Thigh & lower leg bodies (for collision penalty): link1(2), link2(3), link4(5), link5(6), link7(8), link9(10)
+        self._cfrc_ext_contact_indices = [2, 3, 5, 6, 8, 10]
 
         # Non-penalized degrees of freedom range of the control joints
         dof_position_limit_multiplier = 0.9  # The % of the range that is not penalized
@@ -128,10 +131,10 @@ class TurtleMujocoEnv(MujocoEnv):
         # https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-site
         # https://mujoco.readthedocs.io/en/stable/APIreference/APItypes.html#mjtobj
         feet_site = [
-            "FR",
-            "FL",
-            "RR",
-            "RL",
+            "end_leg1",
+            "end_leg2",
+            "end_leg3",
+            "end_leg4",
         ]
         self._feet_site_name_to_id = {
             f: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE.value, f)
@@ -139,7 +142,7 @@ class TurtleMujocoEnv(MujocoEnv):
         }
 
         self._main_body_id = mujoco.mj_name2id(
-            self.model, mujoco.mjtObj.mjOBJ_BODY.value, "trunk"
+            self.model, mujoco.mjtObj.mjOBJ_BODY.value, "base"
         )
 
     def step(self, action):
@@ -276,8 +279,8 @@ class TurtleMujocoEnv(MujocoEnv):
 
     @property
     def torque_cost(self):
-        # Last 10 values are the motor torques (Turtle has 10 joints)
-        return np.sum(np.square(self.data.qfrc_actuator[-10:]))
+        # All values are the motor torques (Turtle has 10 joints)
+        return np.sum(np.square(self.data.qfrc_actuator))
 
     @property
     def vertical_velocity_cost(self):
