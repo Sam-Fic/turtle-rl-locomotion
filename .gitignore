@@ -164,3 +164,4 @@ cython_debug/
 
 .vscode/
 MUJOCO_LOG.TXT
+recordings/
