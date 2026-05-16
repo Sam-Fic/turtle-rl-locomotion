@@ -4,11 +4,8 @@ A custom gymnasium environment for training turtle locomotion using reinforcemen
 
 There are two MJCF models provided for the Turtle robot. One tuned for position control with a proportional controller, and one model which directly takes in torque values for end-to-end training.
 
-### 🦾 Trained Model with Motor Torque Actions
-https://github.com/nimazareian/quadruped-rl-locomotion/assets/28585597/262b7812-0b8f-4758-aedd-a429f743fb69
-
 ### 🎯 Trained Model with Position Actions and a Proportional Controller
-https://github.com/nimazareian/quadruped-rl-locomotion/assets/28585597/f0eddef1-7bc4-4d7a-adc5-35e630ced5d4
+https://github.com/Sam-Fic/turtle-rl-locomotion/blob/main/assets/turtle_position.gif
 
 ## 📦 Setup
 ```bash
