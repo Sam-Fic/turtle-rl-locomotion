@@ -48,8 +48,8 @@
       <camera name="tracking" mode="trackcom" pos="0 -1 0.8" xyaxes="1 0 0 0 1 1" />
       <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01" />
       <freejoint />
-      <site name="imu" pos="0 0 0" size="0.01" group="5" />
-      <site name="head" pos="0.2 0 0" size="0.01" group="5" />
+      <site name="imu" pos="0 0 0" size="0.01" group="5" rgba="1 0 0 1" />
+      <site name="head" pos="0 -0.26 0" size="0.01" group="5" rgba="0 1 0 1" />
       <geom class="visual" mesh="base_link" rgba="0.89412 0.89412 0.89412 1" />
       <geom class="collision" mesh="base_link" />
 
@@ -75,7 +75,7 @@
               range="-1.44 0.4" />
             <geom class="visual" mesh="link3" rgba="0.2 0.7 0.3 1" />
             <geom class="foot" mesh="link3" />
-            <site name="end_leg1" pos="0 0 -0.22" size="0.01" group="5" />
+            <site name="end_leg1" pos="-0.27 0.13 -0.07" size="0.02" group="5" rgba="0 0 1 1" />
           </body>
         </body>
       </body>
@@ -102,7 +102,7 @@
               range="-0.345 1.6" />
             <geom class="visual" mesh="link6" rgba="0.2 0.7 0.3 1" />
             <geom class="foot" mesh="link6" />
-            <site name="end_leg2" pos="0 0 -0.22" size="0.01" group="5" />
+            <site name="end_leg2" pos="0.23 -0.07 -0.02" size="0.02" group="5" rgba="1 1 0 1" />
           </body>
         </body>
       </body>
@@ -120,7 +120,7 @@
           <joint name="joint8" class="thigh_joint" axis="0.59849 -0.80113 0" range="-1.63 1.26" />
           <geom class="visual" mesh="link8" rgba="0.2 0.7 0.3 1" />
           <geom class="foot" mesh="link8" />
-          <site name="end_leg3" pos="0 0 -0.22" size="0.01" group="5" />
+          <site name="end_leg3" pos="0.005 -0.17 0.025" size="0.02" group="5" rgba="1 0 1 1" />
         </body>
       </body>
 
@@ -138,7 +138,7 @@
           <joint name="joint10" class="thigh_joint" axis="-0.770658 -0.637249 0" range="-0.597 2.39" />
           <geom class="visual" mesh="link10" rgba="0.2 0.7 0.3 1" />
           <geom class="foot" mesh="link10" />
-          <site name="end_leg4" pos="0 0 -0.22" size="0.01" group="5" />
+          <site name="end_leg4" pos="0 -0.14 -0.01" size="0.02" group="5" rgba="0 1 1 1" />
         </body>
       </body>
     </body>

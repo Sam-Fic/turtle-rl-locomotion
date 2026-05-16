@@ -116,8 +116,8 @@ class TurtleMujocoEnv(MujocoEnv):
 
         self._reset_noise_scale = 0.1
 
-        # Action: 12 torque values
-        self._last_action = np.zeros(12)
+        # Action: 10 torque values (Turtle has 10 joints)
+        self._last_action = np.zeros(10)
 
         self._clip_obs_threshold = 100.0
         self.observation_space = spaces.Box(
@@ -276,8 +276,8 @@ class TurtleMujocoEnv(MujocoEnv):
 
     @property
     def torque_cost(self):
-        # Last 12 values are the motor torques
-        return np.sum(np.square(self.data.qfrc_actuator[-12:]))
+        # Last 10 values are the motor torques (Turtle has 10 joints)
+        return np.sum(np.square(self.data.qfrc_actuator[-10:]))
 
     @property
     def vertical_velocity_cost(self):
@@ -384,13 +384,13 @@ class TurtleMujocoEnv(MujocoEnv):
         # The first three indices are the global x,y,z position of the trunk of the robot
         # The second four are the quaternion representing the orientation of the robot
         # The above seven values are ignored since they are privileged information
-        # The remaining 12 values are the joint positions
+        # The remaining values are the joint positions (Turtle has 10 joints)
         # The joint positions are relative to the starting position
         dofs_position = self.data.qpos[7:].flatten() - self.model.key_qpos[0, 7:]
 
         # The first three values are the global linear velocity of the robot
         # The second three are the angular velocity of the robot
-        # The remaining 12 values are the joint velocities
+        # The remaining values are the joint velocities (Turtle has 10 joints)
         velocity = self.data.qvel.flatten()
         base_linear_velocity = velocity[:3]
         base_angular_velocity = velocity[3:6]
@@ -430,7 +430,7 @@ class TurtleMujocoEnv(MujocoEnv):
         # Reset the variables and sample a new desired velocity
         self._desired_velocity = self._sample_desired_vel()
         self._step = 0
-        self._last_action = np.zeros(12)
+        self._last_action = np.zeros(10)
         self._feet_air_time = np.zeros(4)
         self._last_contacts = np.zeros(4)
         self._last_render_time = -1.0
