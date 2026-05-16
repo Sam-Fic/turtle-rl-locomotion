@@ -1,5 +1,5 @@
 <mujoco model="turtle scene">
-  <include file="turtle_torque.xml" />
+  <include file="turtle_position.xml" />
 
   <statistic center="0 0 0.1" extent="0.8" />
 
