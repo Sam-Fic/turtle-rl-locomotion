@@ -1,8 +1,8 @@
 # 🐢 Training Turtle Locomotion using Reinforcement Learning in Mujoco
 
-A custom gymnasium environment for training turtle locomotion using reinforcement learning in the Mujoco simulator. The environment has been set up for a custom Turtle robot, however, it can be easily extended to train other robots as well.
+A custom gymnasium environment for training turtle locomotion using reinforcement learning in the Mujoco simulator. The environment has been set up for a custom Turtle robot. However, it can be easily extended to train other robots as well.
 
-There are two MJCF models provided for the Turtle robot. One tuned for position control with a proportional controller, and one model which directly takes in torque values for end-to-end training.
+An MJCF model is provided for the Turtle robot, tuned for position control with a proportional controller.
 
 ### 🎯 Trained Model with Position Actions and a Proportional Controller
 ![turtle_position_animation](https://github.com/Sam-Fic/turtle-rl-locomotion/blob/main/assets/turtle_position.gif)
