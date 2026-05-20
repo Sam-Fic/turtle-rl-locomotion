@@ -29,7 +29,7 @@ class TurtleMujocoEnv(MujocoEnv):
         ],
     }
 
-    def __init__(self, ctrl_type="torque", **kwargs):
+    def __init__(self, ctrl_type="position", **kwargs):
         model_path = Path(f"./turtle/scene_{ctrl_type}.xml")
         MujocoEnv.__init__(
             self,
