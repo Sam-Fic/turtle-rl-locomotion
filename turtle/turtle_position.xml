@@ -123,16 +123,16 @@
   </worldbody>
 
   <actuator>
-    <position name="joint1_motor" joint="joint1" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="-0.502 0.879" />
-    <position name="joint2_motor" joint="joint2" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="-0.973 0.126" />
-    <position name="joint3_motor" joint="joint3" kp="20" kv="1" forcerange="-35.55 35.55" ctrlrange="-1.44 0.4" />
-    <position name="joint4_motor" joint="joint4" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="-0.722 0.722" />
-    <position name="joint5_motor" joint="joint5" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="0.126 1.32" />
-    <position name="joint6_motor" joint="joint6" kp="20" kv="1" forcerange="-35.55 35.55" ctrlrange="-0.345 1.6" />
-    <position name="joint7_motor" joint="joint7" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="-1.04 0.84" />
-    <position name="joint8_motor" joint="joint8" kp="20" kv="1" forcerange="-35.55 35.55" ctrlrange="-1.63 1.26" />
-    <position name="joint9_motor" joint="joint9" kp="20" kv="1" forcerange="-23.7 23.7" ctrlrange="-1.22 0.691" />
-    <position name="joint10_motor" joint="joint10" kp="20" kv="1" forcerange="-35.55 35.55" ctrlrange="-0.597 2.39" />
+    <position name="joint1_motor" joint="joint1" kp="20" kv="1" forcerange="-15 15" ctrlrange="-0.502 0.879" />
+    <position name="joint2_motor" joint="joint2" kp="20" kv="1" forcerange="-15 15" ctrlrange="-0.973 0.126" />
+    <position name="joint3_motor" joint="joint3" kp="20" kv="1" forcerange="-15 15" ctrlrange="-1.44 0.4" />
+    <position name="joint4_motor" joint="joint4" kp="20" kv="1" forcerange="-15 15" ctrlrange="-0.722 0.722" />
+    <position name="joint5_motor" joint="joint5" kp="20" kv="1" forcerange="-15 15" ctrlrange="0.126 1.32" />
+    <position name="joint6_motor" joint="joint6" kp="20" kv="1" forcerange="-15 15" ctrlrange="-0.345 1.6" />
+    <position name="joint7_motor" joint="joint7" kp="20" kv="1" forcerange="-15 15" ctrlrange="-1.04 0.84" />
+    <position name="joint8_motor" joint="joint8" kp="20" kv="1" forcerange="-15 15" ctrlrange="-1.63 1.26" />
+    <position name="joint9_motor" joint="joint9" kp="20" kv="1" forcerange="-15 15" ctrlrange="-1.22 0.691" />
+    <position name="joint10_motor" joint="joint10" kp="20" kv="1" forcerange="-15 15" ctrlrange="-0.597 2.39" />
    </actuator>
 
   <keyframe>
