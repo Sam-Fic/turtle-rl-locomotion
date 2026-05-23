@@ -1,3 +1,4 @@
+<?xml version='1.0' encoding='utf-8'?>
 <mujoco model="turtle">
   <compiler angle="radian" meshdir="./assets/" autolimits="true" />
   <option timestep="0.001" iterations="100" solver="Newton" tolerance="1e-10" />
@@ -46,33 +47,25 @@
     <light name="spotlight" mode="targetbodycom" target="base" pos="0 -1 2" />
     <body name="base" pos="0 0 0.14" childclass="turtle">
       <camera name="tracking" mode="trackcom" pos="0 -1 0.8" xyaxes="1 0 0 0 1 1" />
-      <inertial pos="0 0 0" mass="1.0" diaginertia="0.01 0.01 0.01" />
+      <inertial pos="0 0 0" mass="2.57" diaginertia="2.0474075719e-02 3.0915718791e-02 4.7708505822e-02" quat="0.50705678 0.49336323 0.49295137 -0.50644357" />
       <freejoint />
       <site name="imu" pos="0 0 0" size="0.01" group="5" rgba="1 0 0 1" />
       <site name="head" pos="0 -0.26 0" size="0.01" group="5" rgba="0 1 0 1" />
       <geom class="visual" mesh="base_link" rgba="0.89412 0.89412 0.89412 1" />
       <geom class="collision" mesh="base_link" />
 
-      <!-- Front Right -->
+      
       <body name="link1" pos="0.097388 -0.14699 0" quat="0.156945 0 0 -0.987607">
-        <inertial pos="-0.0086132 0.0041463 0.0062549" quat="0.317872 0.355925 0.562736 0.674983"
-          mass="0.014019" diaginertia="7.74111e-06 6.34788e-06 3.97441e-06" />
+        <inertial pos="-0.0086132 0.0041463 0.0062549" quat="0.317872 0.355925 0.562736 0.674983" mass="0.13" diaginertia="7.1784314145e-05 5.8864712176e-05 3.6855217919e-05" />
         <joint name="joint1" class="leg_joint" range="-0.502 0.879" />
         <geom class="visual" mesh="link1" rgba="0.9 0.5 0.1 1" />
-        <body name="link2" pos="-0.0041022 0.0062787 -0.022095"
-          quat="0.995951 0.0752598 0.0491699 -1.34309e-07">
-          <inertial pos="-6.1964e-05 -0.0023986 -0.0094406"
-            quat="0.449436 -0.11108 0.0599329 0.884351" mass="0.069548"
-            diaginertia="2.17375e-05 1.85727e-05 1.00748e-05" />
+        <body name="link2" pos="-0.0041022 0.0062787 -0.022095" quat="0.995951 0.0752598 0.0491699 -1.34309e-07">
+          <inertial pos="-6.1964e-05 -0.0023986 -0.0094406" quat="0.449436 -0.11108 0.0599329 0.884351" mass="0.17" diaginertia="5.3134166331e-05 4.5398271697e-05 2.4626387531e-05" />
           <joint name="joint2" class="thigh_joint" axis="0.837159 0.546959 0" range="-0.973 0.126" />
           <geom class="visual" mesh="link2" rgba="0.1 0.3 0.8 1" />
-          <body name="link3" pos="0.006714 0.0043866 0"
-            quat="0.997208 -0.0395713 0.060568 -0.0184833">
-            <inertial pos="-0.105472 0.0699603 -0.0292503"
-              quat="0.190864 0.63175 -0.0589225 0.748993" mass="0.182212"
-              diaginertia="0.00108297 0.00101803 7.453e-05" />
-            <joint name="joint3" class="calf_joint" axis="-0.529938 0.811107 -0.247529"
-              range="-1.44 0.4" />
+          <body name="link3" pos="0.006714 0.0043866 0" quat="0.997208 -0.0395713 0.060568 -0.0184833">
+            <inertial pos="-0.105472 0.0699603 -0.0292503" quat="0.190864 0.63175 -0.0589225 0.748993" mass="0.1" diaginertia="5.9434614625e-04 5.5870634206e-04 4.0902904309e-05" />
+            <joint name="joint3" class="calf_joint" axis="-0.529938 0.811107 -0.247529" range="-1.44 0.4" />
             <geom class="visual" mesh="link3" rgba="0.2 0.7 0.3 1" />
             <geom class="foot" mesh="link3" />
             <site name="end_leg1" pos="-0.27 0.13 -0.07" size="0.02" group="5" rgba="0 0 1 1" />
@@ -80,26 +73,18 @@
         </body>
       </body>
 
-      <!-- Front Left -->
+      
       <body name="link4" pos="-0.097388 -0.14699 0" quat="0.0718843 0 0 -0.997413">
-        <inertial pos="0.00945099 -0.00143479 0.00625487" quat="0.642727 0.738738 0.104452 0.173949"
-          mass="0.014019" diaginertia="7.74106e-06 6.34788e-06 3.97441e-06" />
+        <inertial pos="0.00945099 -0.00143479 0.00625487" quat="0.642727 0.738738 0.104452 0.173949" mass="0.13" diaginertia="7.1783850489e-05 5.8864712176e-05 3.6855217919e-05" />
         <joint name="joint4" class="leg_joint" range="-0.722 0.722" />
         <geom class="visual" mesh="link4" rgba="0.9 0.5 0.1 1" />
-        <body name="link5" pos="0.006929 0.0028705 -0.022095"
-          quat="0.989092 0.0563725 -0.136083 -2.55851e-07">
-          <inertial pos="-0.000281988 -0.00159307 -0.00960547"
-            quat="0.983141 -0.01178 0.0676199 0.169474" mass="0.0695483"
-            diaginertia="2.17376e-05 1.8573e-05 1.00746e-05" />
+        <body name="link5" pos="0.006929 0.0028705 -0.022095" quat="0.989092 0.0563725 -0.136083 -2.55851e-07">
+          <inertial pos="-0.000281988 -0.00159307 -0.00960547" quat="0.983141 -0.01178 0.0676199 0.169474" mass="0.17" diaginertia="5.3134181569e-05 4.5398809173e-05 2.4625792435e-05" />
           <joint name="joint5" class="thigh_joint" axis="-0.38273 0.92386 0" range="0.126 1.32" />
           <geom class="visual" mesh="link5" rgba="0.1 0.3 0.8 1" />
-          <body name="link6" pos="0.057826 0.032637 -0.0089085"
-            quat="0.999811 0.0178174 0.00738118 -0.00260652">
-            <inertial pos="0.0685729 -0.0254331 -0.00175279"
-              quat="0.139658 0.721782 -0.0254878 0.677405" mass="0.182228"
-              diaginertia="0.00108309 0.00101814 7.45379e-05" />
-            <joint name="joint6" class="calf_joint" axis="0.915537 0.379279 -0.13394"
-              range="-0.345 1.6" />
+          <body name="link6" pos="0.057826 0.032637 -0.0089085" quat="0.999811 0.0178174 0.00738118 -0.00260652">
+            <inertial pos="0.0685729 -0.0254331 -0.00175279" quat="0.139658 0.721782 -0.0254878 0.677405" mass="0.1" diaginertia="5.9435981298e-04 5.5871765042e-04 4.0903648177e-05" />
+            <joint name="joint6" class="calf_joint" axis="0.915537 0.379279 -0.13394" range="-0.345 1.6" />
             <geom class="visual" mesh="link6" rgba="0.2 0.7 0.3 1" />
             <geom class="foot" mesh="link6" />
             <site name="end_leg2" pos="0.23 -0.07 -0.02" size="0.02" group="5" rgba="1 1 0 1" />
@@ -107,16 +92,13 @@
         </body>
       </body>
 
-      <!-- Back Left -->
+      
       <body name="link7" pos="-0.082932 0.13664 0" quat="0.000996327 0 0 1">
-        <inertial pos="0.0092671 -0.0132743 -0.0340547" quat="0.413574 0.21531 0.674467 0.572444"
-          mass="0.0436895" diaginertia="1.27247e-05 1.22194e-05 6.79083e-06" />
+        <inertial pos="0.0092671 -0.0132743 -0.0340547" quat="0.413574 0.21531 0.674467 0.572444" mass="0.125" diaginertia="3.6406630884e-05 3.4960917383e-05 1.9429239291e-05" />
         <joint name="joint7" class="leg_joint" range="-1.04 0.84" />
         <geom class="visual" mesh="link7" rgba="0.9 0.5 0.1 1" />
-        <body name="link8" pos="0.0073704 0.0055061 -0.040945"
-          quat="0.521581 0.510639 -0.683521 6.6209e-06">
-          <inertial pos="0.0430833 -0.123511 0.00876104" quat="0.511493 0.570328 -0.362187 0.530963"
-            mass="0.12896" diaginertia="0.000421669 0.000360954 6.53977e-05" />
+        <body name="link8" pos="0.0073704 0.0055061 -0.040945" quat="0.521581 0.510639 -0.683521 6.6209e-06">
+          <inertial pos="0.0430833 -0.123511 0.00876104" quat="0.511493 0.570328 -0.362187 0.530963" mass="0.09" diaginertia="2.9427892370e-04 2.5190648263e-04 4.5640454404e-05" />
           <joint name="joint8" class="thigh_joint" axis="0.59849 -0.80113 0" range="-1.63 1.26" />
           <geom class="visual" mesh="link8" rgba="0.2 0.7 0.3 1" />
           <geom class="foot" mesh="link8" />
@@ -124,17 +106,13 @@
         </body>
       </body>
 
-      <!-- Back Right -->
+      
       <body name="link9" pos="0.082932 0.13664 0" quat="0.277986 0 0 -0.960585">
-        <inertial pos="-0.012138 -0.0107123 -0.0340547" quat="0.695276 0.617537 0.342612 0.133626"
-          mass="0.0436896" diaginertia="1.27247e-05 1.22194e-05 6.79083e-06" />
+        <inertial pos="-0.012138 -0.0107123 -0.0340547" quat="0.695276 0.617537 0.342612 0.133626" mass="0.125" diaginertia="3.6406547554e-05 3.4960837362e-05 1.9429194820e-05" />
         <joint name="joint9" class="leg_joint" range="-1.22 0.691" />
         <geom class="visual" mesh="link9" rgba="0.9 0.5 0.1 1" />
-        <body name="link10" pos="-0.05229 -0.031301 -0.040945"
-          quat="0.389294 0.709864 0.586978 -8.9408e-06">
-          <inertial pos="-0.0241032 -0.0720448 -0.00412934"
-            quat="0.606437 0.405935 -0.596477 0.334165" mass="0.128964"
-            diaginertia="0.000421691 0.000360957 6.54165e-05" />
+        <body name="link10" pos="-0.05229 -0.031301 -0.040945" quat="0.389294 0.709864 0.586978 -8.9408e-06">
+          <inertial pos="-0.0241032 -0.0720448 -0.00412934" quat="0.606437 0.405935 -0.596477 0.334165" mass="0.09" diaginertia="2.9428514934e-04 2.5190076300e-04 4.5652158742e-05" />
           <joint name="joint10" class="thigh_joint" axis="-0.770658 -0.637249 0" range="-0.597 2.39" />
           <geom class="visual" mesh="link10" rgba="0.2 0.7 0.3 1" />
           <geom class="foot" mesh="link10" />
@@ -158,8 +136,6 @@
    </actuator>
 
   <keyframe>
-    <key name="home"
-      qpos="0 0 0.2 1 0 0 0 0.189 -0.424 -0.520 0 0.723 0.628 -0.100 -0.185 -0.265 0.897"
-      ctrl="0.189 -0.424 -0.520 0 0.723 0.628 -0.100 -0.185 -0.265 0.897"/>
+    <key name="home" qpos="0 0 0.2 1 0 0 0 0.189 -0.424 -0.520 0 0.723 0.628 -0.100 -0.185 -0.265 0.897" ctrl="0.189 -0.424 -0.520 0 0.723 0.628 -0.100 -0.185 -0.265 0.897" />
   </keyframe>
  </mujoco>
