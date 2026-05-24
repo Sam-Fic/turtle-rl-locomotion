@@ -4,12 +4,29 @@ import time
 from pathlib import Path
 
 import gymnasium as gym
+import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
 from turtle_mujoco_env import TurtleMujocoEnv
 from tqdm import tqdm
+
+
+def linear_schedule(initial_value: float, final_value: float):
+    """
+    Linear learning rate schedule for stable-baselines3.
+
+    Starts at ``initial_value`` and linearly decays to ``final_value``
+    as training progresses (based on ``progress_remaining`` which goes
+    from 1.0 to 0.0).
+    """
+
+    def func(progress_remaining: float) -> float:
+        return final_value + (initial_value - final_value) * progress_remaining
+
+    return func
+
 
 MODEL_DIR = "models"
 LOG_DIR = "logs"
@@ -53,13 +70,24 @@ def train(args):
         )
     else:
         # Default PPO model hyper-parameters give good results
-        # TODO: Use dynamic learning rate
         model = PPO(
             "MlpPolicy",
             vec_env,
             verbose=1,
             tensorboard_log=LOG_DIR,
             device=args.device,
+
+            learning_rate=linear_schedule(3e-4, 1e-5),
+
+            # policy_kwargs=dict(
+            #     net_arch=[256, 256, 128],  # ← 更大的网络
+            #     activation_fn=torch.nn.ReLU,
+            # ),
+
+            # n_steps=4096,          # ← 每轮更多步数
+            # batch_size=256,        # ← 每个 mini-batch 更大
+            # n_epochs=20,           # ← 每轮多训练几遍
+
         )
 
     model.learn(
@@ -184,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device",
         type=str,
-        default="cuda",
+        default="cpu",
         help="Device to use for training (e.g., 'cuda', 'cuda:0', 'cpu').",
     )
     parser.add_argument("--seed", type=int, default=0)
