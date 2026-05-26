@@ -33,10 +33,11 @@ class TurtleMujocoEnv(MujocoEnv):
         self._curriculum_base = 0.3
         self._curriculum_progress = 0.0
         self._step_count = 0
+        self.is_training = True  # 训练模式默认开启，测试时关闭以防止课程进度被覆盖
 
         self._dr_enabled = {
             "friction": True,
-            "mass": True,
+            "mass": False,
             "damping": True,
             "armature": True,
             "frictionloss": True,
@@ -47,12 +48,12 @@ class TurtleMujocoEnv(MujocoEnv):
             "joint_bias": True,
         }
         self._dr_scale_ranges = {
-            "friction": (0.5, 1.8),
+            "friction": (0.5, 1.5),
             "mass": (0.7, 1.3),
-            "damping": (0.3, 3.0),
-            "armature": (0.3, 3.0),
-            "frictionloss": (0.0, 2.0),
-            "motor_kp": (0.6, 1.4),
+            "damping": (0.5, 1.5),
+            "armature": (0.7, 1.3),
+            "frictionloss": (0.0, 1.3),
+            "motor_kp": (0.9, 1.1),
             "gravity_z": (-0.5, 0.5),
             "joint_bias": (0.0, 0.15),
         }
@@ -102,7 +103,7 @@ class TurtleMujocoEnv(MujocoEnv):
         }
         self.cost_weights = {
             "torque": 0.0002,
-            "vertical_vel": 2.0,  # Was 1.0
+            "vertical_vel": 0.2,  # Was 1.0
             "xy_angular_vel": 0.05,  # Was 0.05
             "action_rate": 0.01,
             "joint_limit": 10.0,
@@ -114,7 +115,18 @@ class TurtleMujocoEnv(MujocoEnv):
         }
 
         self._gravity_vector = np.array(self.model.opt.gravity)
-        self._default_joint_position = np.array(self.model.key_ctrl[0])
+        # 从 key_qpos 获取关节角度，跳过前7个基座自由度（位置和姿态）
+        self._default_joint_position = np.array(self.model.key_qpos[0, 7:])
+
+        # Store base model parameters for domain randomization (avoids compounding drift across episodes)
+        self._base_geom_friction = self.model.geom_friction.copy()
+        self._base_body_mass = self.model.body_mass.copy()
+        self._base_dof_damping = self.model.dof_damping.copy()
+        self._base_dof_armature = self.model.dof_armature.copy()
+        self._base_dof_frictionloss = self.model.dof_frictionloss.copy()
+        self._base_actuator_gainprm = self.model.actuator_gainprm.copy()
+        self._base_actuator_biasprm = self.model.actuator_biasprm.copy()
+        self._base_gravity = self.model.opt.gravity.copy()
 
         # vx (m/s), vy (m/s), wz (rad/s)
         # Turtle: -Y direction is forward, +Y is backward
@@ -127,7 +139,7 @@ class TurtleMujocoEnv(MujocoEnv):
             "dofs_position": 1.0,
             "dofs_velocity": 0.05,
         }
-        self._tracking_velocity_sigma = 0.25
+        self._tracking_velocity_sigma = 0.04
 
         # Metrics used to determine if the episode should be terminated
         self._healthy_z_range = (0.08, 0.40)
@@ -161,6 +173,11 @@ class TurtleMujocoEnv(MujocoEnv):
         # Action: 10 torque values (Turtle has 10 joints)
         self._last_action = np.zeros(10)
 
+        # Normalized action space for residual control
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(10,), dtype=np.float32)
+        self.action_scale = 0.2  # Max radians to change per step from default position
+
         self._clip_obs_threshold = 100.0
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=self._get_obs().shape, dtype=np.float64
@@ -186,16 +203,20 @@ class TurtleMujocoEnv(MujocoEnv):
 
     def step(self, action):
         self._step += 1
-        self._step_count += 1
-        self._curriculum_progress = np.clip(
-            self._step_count / 10_000_000, 0.0, 1.0
-        )
+        if self.is_training:  # 仅在训练模式下更新课程进度，防止测试时步数覆盖手动设置的课程进度
+            self._step_count += 1
+            self._curriculum_progress = np.clip(
+                self._step_count / 10_000_000, 0.0, 1.0
+            )
 
         self._action_buffer = np.roll(self._action_buffer, shift=1, axis=0)
         self._action_buffer[0] = action
         delayed_action = self._action_buffer[self._action_delay]
+
+        # Residual control: map normalized action [-1, 1] to delta from default position
+        real_action = self._default_joint_position + delayed_action * self.action_scale
         biased_action = np.clip(
-            delayed_action + self._joint_bias,
+            real_action + self._joint_bias,
             self.model.actuator_ctrlrange[:, 0],
             self.model.actuator_ctrlrange[:, 1],
         )
@@ -238,40 +259,43 @@ class TurtleMujocoEnv(MujocoEnv):
         if self._dr_enabled["friction"]:
             low, high = _interp_range(self._dr_scale_ranges["friction"])
             scales = self.np_random.uniform(low, high, size=ngeom)
-            self.model.geom_friction[:, 0] *= scales
+            self.model.geom_friction[:,
+                                     0] = self._base_geom_friction[:, 0] * scales
 
         if self._dr_enabled["mass"]:
             low, high = _interp_range(self._dr_scale_ranges["mass"])
             scales = self.np_random.uniform(low, high, size=nbody)
-            self.model.body_mass[:] *= scales
+            self.model.body_mass[:] = self._base_body_mass[:] * scales
 
         if self._dr_enabled["damping"]:
             low, high = _interp_range(self._dr_scale_ranges["damping"])
             scales = self.np_random.uniform(low, high, size=nv)
-            self.model.dof_damping[:] *= scales
+            self.model.dof_damping[:] = self._base_dof_damping[:] * scales
 
         if self._dr_enabled["armature"]:
             low, high = _interp_range(self._dr_scale_ranges["armature"])
             scales = self.np_random.uniform(low, high, size=nv)
-            self.model.dof_armature[:] *= scales
+            self.model.dof_armature[:] = self._base_dof_armature[:] * scales
 
         if self._dr_enabled["frictionloss"]:
             low, high = _interp_range(self._dr_scale_ranges["frictionloss"])
             scales = self.np_random.uniform(low, high, size=nv)
-            self.model.dof_frictionloss[:] *= scales
+            self.model.dof_frictionloss[:] = self._base_dof_frictionloss[:] * scales
 
         if self._dr_enabled["motor_kp"] and nu > 0:
             low, high = _interp_range(self._dr_scale_ranges["motor_kp"])
             scales = self.np_random.uniform(low, high, size=nu)
             for i in range(nu):
-                self.model.actuator_gainprm[i, 0] *= scales[i]
-                self.model.actuator_biasprm[i, 1] *= scales[i]
+                self.model.actuator_gainprm[i,
+                                            0] = self._base_actuator_gainprm[i, 0] * scales[i]
+                self.model.actuator_biasprm[i,
+                                            1] = self._base_actuator_biasprm[i, 1] * scales[i]
 
         if self._dr_enabled["gravity"]:
             gz_low, gz_high = self._dr_scale_ranges["gravity_z"]
             grav_offset = self.np_random.uniform(
                 gz_low * progress, gz_high * progress)
-            self.model.opt.gravity[2] += grav_offset
+            self.model.opt.gravity[2] = self._base_gravity[2] + grav_offset
 
         if self._dr_enabled["action_delay"]:
             delay_low = int(self._dr_action_delay_range[0] * progress)
@@ -298,27 +322,25 @@ class TurtleMujocoEnv(MujocoEnv):
         min_z, max_z = self._healthy_z_range
         is_healthy = np.isfinite(state).all() and min_z <= state[2] <= max_z
 
+        # 获取四元数并转换为欧拉角
+        quat = self.data.qpos[3:7]  # w, x, y, z
+        roll, pitch, _ = self.euler_from_quaternion(quat[0], quat[1], quat[2], quat[3])
+
         min_roll, max_roll = self._healthy_roll_range
-        is_healthy = is_healthy and min_roll <= state[4] <= max_roll
+        is_healthy = is_healthy and min_roll <= roll <= max_roll
 
         min_pitch, max_pitch = self._healthy_pitch_range
-        is_healthy = is_healthy and min_pitch <= state[5] <= max_pitch
+        is_healthy = is_healthy and min_pitch <= pitch <= max_pitch
 
         return is_healthy
 
     @property
     def projected_gravity(self):
-        w, x, y, z = self.data.qpos[3:7]
-        euler_orientation = np.array(self.euler_from_quaternion(w, x, y, z))
-        projected_gravity_not_normalized = (
-            np.dot(self._gravity_vector, euler_orientation) * euler_orientation
-        )
-        if np.linalg.norm(projected_gravity_not_normalized) == 0:
-            return projected_gravity_not_normalized
-        else:
-            return projected_gravity_not_normalized / np.linalg.norm(
-                projected_gravity_not_normalized
-            )
+        g_body = self._world_to_body_frame(self.model.opt.gravity)
+        g_body_norm = np.linalg.norm(g_body)
+        if g_body_norm > 0:
+            return g_body / g_body_norm
+        return g_body
 
     @property
     def feet_contact_forces(self):
@@ -328,15 +350,17 @@ class TurtleMujocoEnv(MujocoEnv):
     ######### Positive Reward functions #########
     @property
     def linear_velocity_tracking_reward(self):
+        body_linear_vel = self._world_to_body_frame(self.data.qvel[:3])
         vel_sqr_error = np.sum(
-            np.square(self._desired_velocity[:2] - self.data.qvel[:2])
+            np.square(self._desired_velocity[:2] - body_linear_vel[:2])
         )
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
     def angular_velocity_tracking_reward(self):
+        body_angular_vel = self._world_to_body_frame(self.data.qvel[3:6])
         vel_sqr_error = np.square(
-            self._desired_velocity[2] - self.data.qvel[5])
+            self._desired_velocity[2] - body_angular_vel[2])
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
@@ -349,21 +373,22 @@ class TurtleMujocoEnv(MujocoEnv):
         """Award strides depending on their duration only when the feet makes contact with the ground"""
         feet_contact_force_mag = self.feet_contact_forces
         curr_contact = feet_contact_force_mag > 1.0
-        contact_filter = np.logical_or(curr_contact, self._last_contacts)
-        self._last_contacts = curr_contact
+        # contact_filter = np.logical_or(curr_contact, self._last_contacts)
+        # self._last_contacts = curr_contact
 
         # if feet_air_time is > 0 (feet was in the air) and contact_filter detects a contact with the ground
         # then it is the first contact of this stride
-        first_contact = (self._feet_air_time > 0.0) * contact_filter
+        first_contact = (self._feet_air_time > 0.0) * curr_contact
         self._feet_air_time += self.dt
 
         # Award the feets that have just finished their stride (first step with contact)
-        air_time_reward = np.sum((self._feet_air_time - 1.0) * first_contact)
+        air_time_reward = np.sum((self._feet_air_time - 0.15) * first_contact)
         # No award if the desired velocity is very low (i.e. robot should remain stationary and feet shouldn't move)
         air_time_reward *= np.linalg.norm(self._desired_velocity[:2]) > 0.1
 
         # zero-out the air time for the feet that have just made contact (i.e. contact_filter==1)
-        self._feet_air_time *= ~contact_filter
+        self._feet_air_time[curr_contact] = 0.0
+        self._feet_air_time[~curr_contact] += self.dt
 
         return air_time_reward
 
@@ -507,9 +532,10 @@ class TurtleMujocoEnv(MujocoEnv):
             + joint_acceleration_cost
             + orientation_cost
             + default_joint_position_cost
+            + collision_cost  # 补上漏掉的碰撞惩罚
         )
 
-        reward = max(0.0, rewards - costs)
+        reward = rewards - costs
         # reward = rewards - self.curriculum_factor * costs
         reward_info = {
             "linear_vel_tracking_reward": linear_vel_tracking_reward,
@@ -524,8 +550,8 @@ class TurtleMujocoEnv(MujocoEnv):
         ) - self.model.key_qpos[0, 7:]
 
         velocity = self.data.qvel.flatten()
-        base_linear_velocity = velocity[:3].copy()
-        base_angular_velocity = velocity[3:6].copy()
+        base_linear_velocity = self._world_to_body_frame(velocity[:3].copy())
+        base_angular_velocity = self._world_to_body_frame(velocity[3:6].copy())
         dofs_velocity = velocity[6:].copy()
 
         if self._dr_enabled["sensor_noise"]:
@@ -610,6 +636,13 @@ class TurtleMujocoEnv(MujocoEnv):
             [0.2 * progress, -0.1 - 0.4 * progress, 0.3 * progress])
         desired_vel = self.np_random.uniform(low=vel_min, high=vel_max)
         return desired_vel
+
+    def _world_to_body_frame(self, world_vec):
+        quat = self.data.qpos[3:7]
+        w, x, y, z = quat
+        q_vec = np.array([-x, -y, -z])
+        t = 2.0 * np.cross(q_vec, world_vec)
+        return world_vec + w * t + np.cross(q_vec, t)
 
     @staticmethod
     def euler_from_quaternion(w, x, y, z):

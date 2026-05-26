@@ -79,14 +79,18 @@ def train(args):
 
             learning_rate=linear_schedule(3e-4, 1e-5),
 
-            # policy_kwargs=dict(
-            #     net_arch=[256, 256, 128],  # ← 更大的网络
-            #     activation_fn=torch.nn.ReLU,
-            # ),
+            policy_kwargs=dict(
+                net_arch=[256, 256, 128],  # ← 更大的网络
+                activation_fn=torch.nn.ReLU,
+            ),
 
             # n_steps=4096,          # ← 每轮更多步数
             # batch_size=256,        # ← 每个 mini-batch 更大
             # n_epochs=20,           # ← 每轮多训练几遍
+
+            n_steps=2048,          # 每条环境收集 2048 步
+            batch_size=1024,       # 把 Mini-batch 从 64 扩大至 1024（推荐值 1024 或 2048）
+            n_epochs=5,            # 每次收集完数据迭代 5 遍即可（防止过拟合发散）
 
         )
 
@@ -110,6 +114,8 @@ def test(args):
             ctrl_type=args.ctrl_type,
             render_mode="human",
         )
+        env.is_training = False  # 关闭训练状态，防止步数覆写课程
+        env._curriculum_progress = 1.0  # 显式指定测试时使用最高难度的课程配置
         inter_frame_sleep = 0.016
     else:
         # Record the episodes
@@ -120,6 +126,8 @@ def test(args):
             width=1920,
             height=1080,
         )
+        env.is_training = False  # 关闭训练状态，防止步数覆写课程
+        env._curriculum_progress = 1.0  # 显式指定测试时使用最高难度的课程配置
         env = gym.wrappers.RecordVideo(
             env, video_folder="recordings/", name_prefix=model_path.parent.name
         )
