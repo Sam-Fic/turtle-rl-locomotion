@@ -360,17 +360,14 @@ class TurtleMujocoEnv(MujocoEnv):
     ######### Positive Reward functions #########
     @property
     def linear_velocity_tracking_reward(self):
-        body_linear_vel = self._world_to_body_frame(self.data.qvel[:3])
         vel_sqr_error = np.sum(
-            np.square(self._desired_velocity[:2] - body_linear_vel[:2])
+            np.square(self._desired_velocity[:2] - self.data.qvel[:2])
         )
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
     def angular_velocity_tracking_reward(self):
-        body_angular_vel = self._world_to_body_frame(self.data.qvel[3:6])
-        vel_sqr_error = np.square(
-            self._desired_velocity[2] - body_angular_vel[2])
+        vel_sqr_error = np.square(self._desired_velocity[2] - self.data.qvel[5])
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
