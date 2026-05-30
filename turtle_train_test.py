@@ -4,12 +4,29 @@ import time
 from pathlib import Path
 
 import gymnasium as gym
+import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
-from turtle_mujoco_env import TurtleMujocoEnv
+from turtle_mujoco_env_test import TurtleMujocoEnv
 from tqdm import tqdm
+
+
+def linear_schedule(initial_value: float, final_value: float):
+    """
+    Linear learning rate schedule for stable-baselines3.
+
+    Starts at ``initial_value`` and linearly decays to ``final_value``
+    as training progresses (based on ``progress_remaining`` which goes
+    from 1.0 to 0.0).
+    """
+
+    def func(progress_remaining: float) -> float:
+        return final_value + (initial_value - final_value) * progress_remaining
+
+    return func
+
 
 MODEL_DIR = "models"
 LOG_DIR = "logs"
@@ -18,8 +35,19 @@ LOG_DIR = "logs"
 def train(args):
     vec_env = make_vec_env(
         TurtleMujocoEnv,
-        env_kwargs={"ctrl_type": args.ctrl_type},
+        env_kwargs={"ctrl_type": args.ctrl_type, "n_envs": args.num_parallel_envs},
         n_envs=args.num_parallel_envs,
+        seed=args.seed,
+        vec_env_cls=SubprocVecEnv,
+    )
+
+    # Create a separate evaluation environment to avoid state pollution
+    # Reusing vec_env for evaluation triggers env.reset() which calls _apply_domain_randomization(),
+    # contaminating training environments with new random seeds and curriculum states.
+    eval_env = make_vec_env(
+        TurtleMujocoEnv,
+        env_kwargs={"ctrl_type": args.ctrl_type, "n_envs": 1},
+        n_envs=1,
         seed=args.seed,
         vec_env_cls=SubprocVecEnv,
     )
@@ -38,7 +66,7 @@ def train(args):
     # Evaluate the model every eval_frequency for 5 episodes and save
     # it if it's improved over the previous best model.
     eval_callback = EvalCallback(
-        vec_env,
+        eval_env,
         best_model_save_path=model_path,
         log_path=LOG_DIR,
         eval_freq=args.eval_frequency,
@@ -53,13 +81,28 @@ def train(args):
         )
     else:
         # Default PPO model hyper-parameters give good results
-        # TODO: Use dynamic learning rate
         model = PPO(
             "MlpPolicy",
             vec_env,
             verbose=1,
             tensorboard_log=LOG_DIR,
             device=args.device,
+
+            learning_rate=linear_schedule(3e-4, 1e-5),
+
+            policy_kwargs=dict(
+                net_arch=[256, 256, 128],  # ← 更大的网络
+                activation_fn=torch.nn.ReLU,
+            ),
+
+            # n_steps=4096,          # ← 每轮更多步数
+            # batch_size=256,        # ← 每个 mini-batch 更大
+            # n_epochs=20,           # ← 每轮多训练几遍
+
+            n_steps=2048,          # 每条环境收集 2048 步
+            batch_size=1024,       # 把 Mini-batch 从 64 扩大至 1024（推荐值 1024 或 2048）
+            n_epochs=5,            # 每次收集完数据迭代 5 遍即可（防止过拟合发散）
+
         )
 
     model.learn(
@@ -82,6 +125,8 @@ def test(args):
             ctrl_type=args.ctrl_type,
             render_mode="human",
         )
+        env.is_training = False  # 关闭训练状态，防止步数覆写课程
+        env._curriculum_progress = 1.0  # 显式指定测试时使用最高难度的课程配置
         inter_frame_sleep = 0.016
     else:
         # Record the episodes
@@ -92,6 +137,8 @@ def test(args):
             width=1920,
             height=1080,
         )
+        env.is_training = False  # 关闭训练状态，防止步数覆写课程
+        env._curriculum_progress = 1.0  # 显式指定测试时使用最高难度的课程配置
         env = gym.wrappers.RecordVideo(
             env, video_folder="recordings/", name_prefix=model_path.parent.name
         )
