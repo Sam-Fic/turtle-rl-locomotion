@@ -4,13 +4,28 @@ import time
 from pathlib import Path
 
 import gymnasium as gym
+import numpy as np
 import torch
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
 from turtle_mujoco_env_test import TurtleMujocoEnv
 from tqdm import tqdm
+
+
+class RewardLoggingCallback(BaseCallback):
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        if infos:
+            r_motion = np.mean([info.get("r_motion", 0.0) for info in infos])
+            r_en = np.mean([info.get("r_en", 0.0) for info in infos])
+            r_aux = np.mean([info.get("r_aux", 0.0) for info in infos])
+
+            self.logger.record("reward/r_motion", r_motion)
+            self.logger.record("reward/r_en", r_en)
+            self.logger.record("reward/r_aux", r_aux)
+        return True
 
 
 def linear_schedule(initial_value: float, final_value: float):
@@ -35,7 +50,8 @@ LOG_DIR = "logs"
 def train(args):
     vec_env = make_vec_env(
         TurtleMujocoEnv,
-        env_kwargs={"ctrl_type": args.ctrl_type, "n_envs": args.num_parallel_envs},
+        env_kwargs={"ctrl_type": args.ctrl_type,
+                    "n_envs": args.num_parallel_envs},
         n_envs=args.num_parallel_envs,
         seed=args.seed,
         vec_env_cls=SubprocVecEnv,
@@ -110,7 +126,7 @@ def train(args):
         reset_num_timesteps=False,
         progress_bar=True,
         tb_log_name=run_name,
-        callback=eval_callback,
+        callback=[RewardLoggingCallback(), eval_callback],
     )
     # Save final model
     model.save(f"{model_path}/final_model")
