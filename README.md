@@ -5,7 +5,7 @@ A custom Gymnasium environment for training turtle locomotion using reinforcemen
 An MJCF model is provided for the Turtle robot, tuned for position control with a proportional controller.
 
 ### Trained Model with Position Actions and a Proportional Controller
-![turtle_position_animation](https://github.com/Sam-Fic/turtle-rl-locomotion/blob/main/assets/turtle_position.gif)
+![turtle_position_animation](./assets/turtle_position.gif)
 
 ## Setup
 ```bash
