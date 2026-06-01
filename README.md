@@ -12,6 +12,14 @@ An MJCF model is provided for the Turtle robot, tuned for position control with 
 python -m pip install -r requirements.txt
 ```
 
+## Current Work
+
+Currently, I'm working on two test files:
+- `turtle_mujoco_env_test.py`
+- `turtle_train_test.py`
+
+These are inspired by the paper "Adaptive Energy Regularization for Autonomous Gait Transition and Energy-Efficient Quadruped Locomotion" ([arXiv:2403.20001](https://arxiv.org/abs/2403.20001)) by Boyuan Liang et al. (2025). The core idea being explored here is to use a simpler, energy-centric reward policy that encourages reduced energy consumption, allowing the robot to autonomously select appropriate gaits. These tests are ongoing modification attempts to implement and evaluate this approach.
+
 ## Training
 ```bash
 python turtle_train.py --run train
