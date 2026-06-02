@@ -36,6 +36,7 @@ class TurtleMujocoEnv(MujocoEnv):
         self.is_training = True  # 训练模式默认开启，测试时关闭以防止课程进度被覆盖
         self._use_curriculum_progress = False  # 是否启用课程进度自动更新，关闭后进度将固定为最大值 1.0
         # 启用课程进度时从 0 开始逐步增长；关闭时固定为 1.0（满强度）
+        self._use_dynamic_alpha_en = False
         self._curriculum_progress = 0.0 if self._use_curriculum_progress else 1.0
 
         self._dr_enabled = {
@@ -68,6 +69,7 @@ class TurtleMujocoEnv(MujocoEnv):
             "projected_gravity": 0.005,
         }
         self._dr_action_delay_range = (0, 3)
+        self._use_action_delay = False  # 是否启用动作延迟（即使 DR 未启用，也可以强制开启）
         self._action_buffer = np.zeros(
             (self._dr_action_delay_range[1] + 1, 10))
         self._action_delay = 0
@@ -96,23 +98,41 @@ class TurtleMujocoEnv(MujocoEnv):
         self._last_render_time = -1.0
         self._max_episode_time_sec = 15.0
         self._step = 0
+        self._last_y = 0.0
+        self._last_y_vel = 0.0
 
         # Weights for the reward and cost functions
         self.reward_weights = {
-            "linear_vel_tracking": 1.0, 
+            "linear_vel_tracking": 1.0,    # Was 1.0，增加线速度跟踪奖励权重以鼓励机器人更积极地向前移动
             "angular_vel_tracking": 1.0,
         }
+
+        # self.cost_weights = {
+        #     "torque": 0.0002,
+        #     "vertical_vel": 0.2,  # Was 1.0
+        #     "xy_angular_vel": 0.05,  # Was 0.05
+        #     "action_rate": 0.05,  # Was 0.05
+        #     "joint_limit": 1.5,
+        #     "joint_velocity": 0.01,   # Was 0.01
+        #     "joint_acceleration": 2.5e-7,     # Was 2.5e-7
+        #     "orientation": 0.3,
+        #     "collision": 0.05,
+        #     "default_joint_position": 0.01,   # 降低默认关节位置成本，让智能体有更多自由度去发现更高效的步态，而不是过早地被默认位置限制住
+        #     "vel_sqr_error": 0.04,
+        # }
+
         self.cost_weights = {
-            "torque": 0.0002,
-            "vertical_vel": 0.2,  # Was 1.0
-            "xy_angular_vel": 0.05,  # Was 0.05
-            "action_rate": 0.05,
-            "joint_limit": 1.5,
-            "joint_velocity": 0.01,
-            "joint_acceleration": 2.5e-7,
-            "orientation": 0.3,
-            "collision": 0.05,
-            "default_joint_position": 0.5
+            "torque": 0.00002,       # 降低到1/10
+            "vertical_vel": 0.02,    # 降低到1/10
+            "xy_angular_vel": 0.01,  # 降低到1/5
+            "action_rate": 0.01,     # 降低到1/5
+            "joint_limit": 0.15,     # 降低到1/10
+            "joint_velocity": 0.001,  # 降低到1/10
+            "joint_acceleration": 2.5e-8,  # 降低到1/10
+            "orientation": 0.03,     # 降低到1/10
+            "collision": 0.01,       # 降低到1/5
+            "default_joint_position": 0.001,  # 降低到1/10
+            "vel_sqr_error": 0.005,  # 降低到1/8
         }
 
         self._gravity_vector = np.array(self.model.opt.gravity)
@@ -142,9 +162,9 @@ class TurtleMujocoEnv(MujocoEnv):
         }
         # 论文中 sigma_v 和 sigma_omega 均为 0.25
         self._tracking_velocity_sigma = 0.25
-        
+
         # 论文能量奖励超参数
-        self.alpha_en = 0.0        # 能量奖励权重：初期设为0，待智能体学会稳定步态后再开启
+        self.alpha_en = 1.0        # 能量奖励权重
         self.sigma_en_x = 1000.0  # 线速度能量缩放常数
         self.sigma_en_z = 500.0   # 角速度能量缩放常数
         self.alpha_ang = 0.5      # 角速度跟踪奖励权重
@@ -179,13 +199,14 @@ class TurtleMujocoEnv(MujocoEnv):
         # Action: 10 torque values (Turtle has 10 joints)
         self._last_action = np.zeros(10)
         self._last_qpos = np.zeros(
-            self.model.nq - 7  # joint positions, excluding root (7 DOFs: pos+quat)
+            # joint positions, excluding root (7 DOFs: pos+quat)
+            self.model.nq - 7
         )
 
         # Normalized action space for residual control
         self.action_space = spaces.Box(
             low=-1.0, high=1.0, shape=(10,), dtype=np.float32)
-        self.action_scale = 0.7  # Max radians to change per step from default position
+        self.action_scale = 1.2  # Max radians to change per step from default position
 
         self._clip_obs_threshold = 100.0
         self.observation_space = spaces.Box(
@@ -218,9 +239,12 @@ class TurtleMujocoEnv(MujocoEnv):
                 self._step_count / (10_000_000 / self.n_envs), 0.0, 1.0
             )
 
+        self._last_y = self.data.qpos[1]
+        self._last_y_vel = self.data.qvel[1]
+
         self._action_buffer = np.roll(self._action_buffer, shift=1, axis=0)
         self._action_buffer[0] = action
-        delayed_action = self._action_buffer[self._action_delay]
+        delayed_action = self._action_buffer[self._action_delay] if self._use_action_delay else action
 
         # Residual control: map normalized action [-1, 1] to delta from default position
         real_action = self._default_joint_position + delayed_action * self.action_scale
@@ -334,7 +358,8 @@ class TurtleMujocoEnv(MujocoEnv):
 
         # 获取四元数并转换为欧拉角
         quat = self.data.qpos[3:7]  # w, x, y, z
-        roll, pitch, _ = self.euler_from_quaternion(quat[0], quat[1], quat[2], quat[3])
+        roll, pitch, _ = self.euler_from_quaternion(
+            quat[0], quat[1], quat[2], quat[3])
 
         min_roll, max_roll = self._healthy_roll_range
         is_healthy = is_healthy and min_roll <= roll <= max_roll
@@ -367,7 +392,8 @@ class TurtleMujocoEnv(MujocoEnv):
 
     @property
     def angular_velocity_tracking_reward(self):
-        vel_sqr_error = np.square(self._desired_velocity[2] - self.data.qvel[5])
+        vel_sqr_error = np.square(
+            self._desired_velocity[2] - self.data.qvel[5])
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
@@ -380,20 +406,23 @@ class TurtleMujocoEnv(MujocoEnv):
         # 获取关节扭矩和关节速度 (跳过 root 的 6 个自由度)
         tau = self.data.qfrc_actuator[6:]
         qvel = self.data.qvel[6:]
-        
+
         # 分子：所有关节电机消耗的总功率 (取绝对值)
         power = np.sum(np.abs(tau) * np.abs(qvel))
-        
+
         # 分母：基于线速度和角速度加权的广义运动距离
         body_linear_vel = self._world_to_body_frame(self.data.qvel[:3])
         body_angular_vel = self._world_to_body_frame(self.data.qvel[3:6])
-        
-        vx = np.abs(body_linear_vel[0])
+
+        vy = np.abs(body_linear_vel[1])
         wz = np.abs(body_angular_vel[2])
-        
+
+        if vy < 0.15:
+            return 0.0
+
         # 添加小值 0.1 防止分母为 0
-        denominator = self.sigma_en_x * vx + self.sigma_en_z * wz + 0.1
-        
+        denominator = self.sigma_en_x * vy + self.sigma_en_z * wz + 0.1
+
         return np.exp(-power / denominator)
 
     @property
@@ -478,66 +507,57 @@ class TurtleMujocoEnv(MujocoEnv):
         self._curriculum_progress = np.clip(value, 0.0, 1.0)
 
     def _calc_reward(self, action):
-        # TODO: Add debug mode with custom Tensorboard calls for individual reward
-        #   functions to get a better sense of the contribution of each reward function
-        # TODO: Cost for thigh or calf contact with the ground
-
-        # 能量奖励权重随课程进度从 0 逐渐增加到目标值，让智能体先学会基本步态再优化能量效率
-        # progress < 0.3: alpha_en = 0 (完全关闭能量奖励)
-        # 0.3 <= progress <= 1.0: alpha_en 线性增长到目标值 1.0
         progress = self._curriculum_progress
-        if progress < 0.3:
-            dynamic_alpha_en = 0.0
-        else:
-            dynamic_alpha_en = self.alpha_en * min(1.0, (progress - 0.3) / 0.7)
+        dynamic_alpha_en = self.alpha_en if not self._use_dynamic_alpha_en else (
+            0.0 if progress < 0.3 else self.alpha_en * min(1.0, (progress - 0.3) / 0.7)
+        )
 
-        # 1. Motion Rewards (R_motion)
+        forward_speed = -self.data.qvel[1]  # 瞬时前进速度（-Y方向为正）
+        displacement_y = -(self.data.qpos[1] - self._last_y)
+
+        y_acceleration = (self.data.qvel[1] - self._last_y_vel) / self.dt
+
         r_motion = (
-            self.linear_velocity_tracking_reward * self.reward_weights["linear_vel_tracking"]
-            + self.alpha_ang * self.angular_velocity_tracking_reward * self.reward_weights["angular_vel_tracking"]
+            0.3 * self.linear_velocity_tracking_reward * self.reward_weights["linear_vel_tracking"]
+            + 0.3 * self.alpha_ang * self.angular_velocity_tracking_reward * self.reward_weights["angular_vel_tracking"]
+            + 20.0 * displacement_y
+            + 5.0 * max(0.0, forward_speed - 0.2)
+            + 10.0 * max(0.0, forward_speed - 0.4)
+            - 15.0 * max(0.0, -forward_speed)
         )
-        
-        # 2. Energy Reward (R_en) - 使用动态权重
+
         r_en = self.energy_reward
-        
-        # 3. Auxiliary Costs (R_aux)
+
         ctrl_cost = self.torque_cost * self.cost_weights["torque"]
-        action_rate_cost = (
-            self.action_rate_cost(action) * self.cost_weights["action_rate"]
-        )
-        vertical_vel_cost = (
-            self.vertical_velocity_cost * self.cost_weights["vertical_vel"]
-        )
-        xy_angular_vel_cost = (
-            self.xy_angular_velocity_cost * self.cost_weights["xy_angular_vel"]
-        )
-        joint_limit_cost = self.joint_limit_cost * \
-            self.cost_weights["joint_limit"]
-        joint_velocity_cost = (
-            self.joint_velocity_cost * self.cost_weights["joint_velocity"]
-        )
-        joint_acceleration_cost = (
-            self.acceleration_cost * self.cost_weights["joint_acceleration"]
-        )
-        orientation_cost = self.non_flat_base_cost * \
-            self.cost_weights["orientation"]
+        action_rate_cost = self.action_rate_cost(action) * self.cost_weights["action_rate"]
+        vertical_vel_cost = self.vertical_velocity_cost * self.cost_weights["vertical_vel"]
+        xy_angular_vel_cost = self.xy_angular_velocity_cost * self.cost_weights["xy_angular_vel"]
+        joint_limit_cost = self.joint_limit_cost * self.cost_weights["joint_limit"]
+        joint_velocity_cost = self.joint_velocity_cost * self.cost_weights["joint_velocity"]
+        joint_acceleration_cost = self.acceleration_cost * self.cost_weights["joint_acceleration"]
+        orientation_cost = self.non_flat_base_cost * self.cost_weights["orientation"]
         collision_cost = self.collision_cost * self.cost_weights["collision"]
-        default_joint_position_cost = (
-            self.default_joint_position_cost
-            * self.cost_weights["default_joint_position"]
-        )
-        
-        smoothness_cost = self.smoothness_cost
+        default_joint_position_cost = self.default_joint_position_cost * self.cost_weights["default_joint_position"]
+
+        y_acceleration_cost = np.square(y_acceleration) * 0.01
+        excessive_speed_cost = max(0.0, np.abs(forward_speed) - 0.6) * 5.0
+
         r_aux = (
             ctrl_cost + action_rate_cost + vertical_vel_cost + xy_angular_vel_cost +
             joint_limit_cost + joint_velocity_cost + joint_acceleration_cost +
-            orientation_cost + default_joint_position_cost + collision_cost 
-            # + smoothness_cost
+            orientation_cost + default_joint_position_cost + collision_cost +
+            y_acceleration_cost + excessive_speed_cost
         )
-        
-        # 4. Total Reward: R = (R_motion + dynamic_alpha_en * R_en) * exp(-clip(R_aux, 0, 2.0))
-        reward = (r_motion + dynamic_alpha_en * r_en) * np.exp(-np.clip(r_aux, 0, 2.0))  # clip r_aux 防止初期成本过高导致奖励被归零
-        
+
+        vel_sqr_error = np.sum(
+            np.square(self._desired_velocity[:2] - self.data.qvel[:2])
+        )
+        r_special = vel_sqr_error * self.cost_weights["vel_sqr_error"]
+
+        reward = (r_motion + dynamic_alpha_en * r_en) * \
+            np.exp(-np.clip(r_aux, 0, 1.0)) - \
+            r_special * 0.5
+
         reward_info = {
             "r_motion": r_motion,
             "r_en": r_en,

@@ -104,7 +104,9 @@ def train(args):
             tensorboard_log=LOG_DIR,
             device=args.device,
 
-            learning_rate=linear_schedule(3e-4, 1e-5),
+            # learning_rate=linear_schedule(3e-4, 1e-5),
+            learning_rate=linear_schedule(3e-4, 3e-4),   # 暂时取消学习率线性衰减
+
 
             policy_kwargs=dict(
                 net_arch=[256, 256, 128],  # ← 更大的网络
@@ -205,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_parallel_envs",
         type=int,
-        default=24,
+        default=10,
         help="Number of parallel environments while training",
     )
     parser.add_argument(
