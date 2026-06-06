@@ -1,8 +1,10 @@
-torch==2.2.1
-numpy
+torch==2.12.0
+numpy>=2.0,<3.0
 tensorboard
 gymnasium==1.0.0
 protobuf==4.25.3 # Tensorboard throws an error with newer versions of protobuf
-stable-baselines3[extra]==2.4.0
+stable-baselines3[extra]==2.8.0
 mujoco==3.8.0
 imageio
+cloudpickle>=3.0
+tqdm
