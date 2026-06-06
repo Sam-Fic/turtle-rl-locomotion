@@ -1,8 +1,6 @@
 from gymnasium import spaces
 from gymnasium.envs.mujoco import MujocoEnv
 
-from multiprocessing import current_process
-
 import mujoco
 
 import numpy as np
@@ -21,33 +19,7 @@ DEFAULT_CAMERA_CONFIG = {
 
 
 class TurtleMujocoEnv(MujocoEnv):
-    """Custom Environment that follows gym interface.
-
-    ==============================================================
-    坐标系约定
-    ==============================================================
-    本 turtle 模型的基座坐标系（与 turtle_position.xml 一致）：
-
-        朝向：+X 左 / -X 右   （俯视，左/右镜像）
-        前进：-Y             （site "head" pos="0 -0.26 0" 标在 -Y 一侧）
-        后退：+Y
-        上：   +Z
-
-    速度约定（qvel[0:3] = base 线速度在世界系下的分量）：
-        qvel[0]  = vx  （左正 / 右负，对前进无贡献，本项目固定为 0）
-        qvel[1]  = vy  （后正 / 前负——**前进时为负**）
-        qvel[2]  = vz  （上正 / 下负）
-
-    所以期望速度的"前进"分量必须写成 **负值**：
-        _desired_velocity = [vx, vy, wz] = [0.0, -1.0, 0.0]   ← 1 m/s 向前
-        训练曲线里的 velocity_y 也应稳定在 -0.9 ~ -1.0 区间。
-
-    角速度约定（qvel[3:6] = base 角速度在世界系下的分量）：
-        qvel[3]  = wx  roll
-        qvel[4]  = wy  pitch
-        qvel[5]  = wz  yaw  （左旋 / 右旋，按右手系）
-    ==============================================================
-    """
+    """Custom Environment that follows gym interface."""
 
     metadata = {
         "render_modes": [
@@ -57,18 +29,7 @@ class TurtleMujocoEnv(MujocoEnv):
         ],
     }
 
-    def __init__(self, ctrl_type="position", curriculum_start_vy=None, **kwargs):
-        """Initialize the environment.
-
-        Parameters
-        ----------
-        ctrl_type : str
-            "torque" 或 "position"，控制模式。
-        curriculum_start_vy : float, optional
-            接续训练时指定课程期望速度的起点（如 -0.35 表示从 0.35 m/s 开始）。
-            None（默认）= 从头开始，vy 从 -0.3 线性增长到 -1.0。
-            接续时根据该值反推 _total_env_steps，让课程自然从该点继续。
-        """
+    def __init__(self, ctrl_type="position", **kwargs):
         model_path = Path(f"./turtle/scene_{ctrl_type}.xml")
         MujocoEnv.__init__(
             self,
@@ -91,75 +52,44 @@ class TurtleMujocoEnv(MujocoEnv):
         }
         self._last_render_time = -1.0
         self._max_episode_time_sec = 15.0
-        self._step = 0           # per-episode 步数（用于 truncated 判断）
-        self._total_env_steps = 0  # 全局步数（用于 curriculum 速度渐进）
-
-        # SubprocVecEnv 下每个 worker 都是独立进程，进程名不是 "MainProcess"；
-        # 只有主进程才需要打这种"启动一次"的诊断日志，避免训练时刷屏 12 份。
-        self._rank = 0 if current_process().name == "MainProcess" else 1
+        self._step = 0
 
         # Weights for the reward and cost functions
         self.reward_weights = {
-            "linear_vel_tracking": 3.0,  # Was 2.0
+            "linear_vel_tracking": 2.0,  # Was 1.0
             "angular_vel_tracking": 1.0,
             "healthy": 0.0,  # was 0.05
-            "feet_airtime": 1.5,  # Was 1.0
-            "diagonal_phase": 0.5,  
+            "feet_airtime": 1.0,
         }
         self.cost_weights = {
             "torque": 0.0002,
             "vertical_vel": 2.0,  # Was 1.0
-            "xy_angular_vel": 0.1,  # Was 0.05
+            "xy_angular_vel": 0.05,  # Was 0.05
             "action_rate": 0.01,
             "joint_limit": 10.0,
             "joint_velocity": 0.01,
-            "joint_acceleration": 2.5e-7,
+            "joint_acceleration": 2.5e-7, 
             "orientation": 1.0,
             "collision": 1.0,
-            "default_joint_position": 0.1,
-            "yaw_drift": 1.5,  # 位置型偏航惩罚权重
+            "default_joint_position": 0.1
         }
 
         self._curriculum_base = 0.3
-
-        # 接续训练：把 _total_env_steps 放到对应 curriculum_start_vy 的位置。
-        # 公式：cur_vy = -base + (base - 1) * progress
-        #   → progress = (cur_vy + base) / (base - 1)
-        # 之后再自然累加 step 即可保持课程曲线连续。
-        if curriculum_start_vy is not None:
-            base = self._curriculum_base
-            progress = (curriculum_start_vy + base) / (base - 1.0)
-            progress = max(0.0, min(1.0, progress))
-            self._total_env_steps = int(progress * 3_000_000)
-            if self._rank == 0:
-                print(
-                    f"[TurtleMujocoEnv] 接续 curriculum: start_vy={curriculum_start_vy:.3f} "
-                    f"→ progress={progress:.3f} → _total_env_steps={self._total_env_steps}"
-                )
-
         self._gravity_vector = np.array(self.model.opt.gravity)
         self._default_joint_position = np.array(self.model.key_ctrl[0])
 
         # vx (m/s), vy (m/s), wz (rad/s)
         # Turtle: -Y direction is forward, +Y is backward
-        self._desired_velocity_min = np.array([0.0, -1.0, -0.0])
-        self._desired_velocity_max = np.array([0.0, -1.0, 0.0])
-        self._desired_velocity = self._sample_desired_vel()  # [0.0, -1.0, 0.0]
+        self._desired_velocity_min = np.array([0.0, -0.5, -0.0])
+        self._desired_velocity_max = np.array([0.0, -0.5, 0.0])
+        self._desired_velocity = self._sample_desired_vel()  # [0.0, -0.5, 0.0]
         self._obs_scale = {
             "linear_velocity": 2.0,
             "angular_velocity": 0.25,
             "dofs_position": 1.0,
             "dofs_velocity": 0.05,
         }
-        # σ 越小奖励对速度误差越敏感。
-        self._tracking_velocity_sigma = 0.10
-
-        # 论文能量奖励超参数
-        self.alpha_en = 1.0       # 能量奖励权重
-        self.sigma_en_x = 1000.0  # 线速度能量缩放常数
-        self.sigma_en_z = 500.0   # 角速度能量缩放常数
-        self.alpha_ang = 0.5      # 角速度跟踪奖励权重
-        self.alpha_forward = 0.5  # 前向跟踪奖励权重
+        self._tracking_velocity_sigma = 0.25
 
         # Metrics used to determine if the episode should be terminated
         self._healthy_z_range = (0.08, 0.40)
@@ -170,14 +100,6 @@ class TurtleMujocoEnv(MujocoEnv):
         self._last_contacts = np.zeros(4)
         # Feet flippers (for landing reward): link3(4), link6(7), link8(9), link10(11)
         self._cfrc_ext_feet_indices = [4, 7, 9, 11]
-        # 用 cfrc_ext 索引得到 4 条腿 calf 的 body id（用于 diagonal_phase_reward）。
-        # 顺序与 turtle_position.xml 一致：左前(FL), 右前(FR), 右后(RR), 左后(RL)
-        # cfrc_ext[4]=link3(FL), [7]=link6(FR), [9]=link8(RR), [11]=link10(RL)
-        self._foot_body_ids = list(self._cfrc_ext_feet_indices)
-        # 对角配对索引：(FL, FR, RL, RR) 在 self._foot_body_ids 里的下标
-        #   FL → 0, FR → 1, RR → 2, RL → 3
-        #   对角组合 (FL, RR) = (0, 2); (FR, RL) = (1, 3)
-        self._diag_pair_indices = (0, 1, 3, 2)
         # Thigh & lower leg bodies (for collision penalty): link1(2), link2(3), link4(5), link5(6), link7(8), link9(10)
         self._cfrc_ext_contact_indices = [2, 3, 5, 6, 8, 10]
 
@@ -224,12 +146,8 @@ class TurtleMujocoEnv(MujocoEnv):
             self.model, mujoco.mjtObj.mjOBJ_BODY.value, "base"
         )
 
-        # 位置型偏航惩罚的基准值：在 reset_model 中按当前 qpos[3:7] 重新采样
-        self._initial_yaw = 0.0
-
     def step(self, action):
         self._step += 1
-        self._total_env_steps += 1  # curriculum 用的全局步数
         self.do_simulation(action, self.frame_skip)
 
         observation = self._get_obs()
@@ -290,7 +208,6 @@ class TurtleMujocoEnv(MujocoEnv):
     ######### Positive Reward functions #########
     @property
     def linear_velocity_tracking_reward(self):
-        # 跟踪 [vx, vy] 的平方误差。本模型 -Y 前进，所以 desired[1]=-1，qvel[1]=-1 是完美跟踪。
         vel_sqr_error = np.sum(
             np.square(self._desired_velocity[:2] - self.data.qvel[:2])
         )
@@ -298,8 +215,7 @@ class TurtleMujocoEnv(MujocoEnv):
 
     @property
     def angular_velocity_tracking_reward(self):
-        vel_sqr_error = np.square(
-            self._desired_velocity[2] - self.data.qvel[5])
+        vel_sqr_error = np.square(self._desired_velocity[2] - self.data.qvel[5])
         return np.exp(-vel_sqr_error / self._tracking_velocity_sigma)
 
     @property
@@ -311,8 +227,7 @@ class TurtleMujocoEnv(MujocoEnv):
     def feet_air_time_reward(self):
         """Award strides depending on their duration only when the feet makes contact with the ground"""
         feet_contact_force_mag = self.feet_contact_forces
-        # 调整接触阈值为 10N
-        curr_contact = feet_contact_force_mag > 10.0
+        curr_contact = feet_contact_force_mag > 1.0
         contact_filter = np.logical_or(curr_contact, self._last_contacts)
         self._last_contacts = curr_contact
 
@@ -321,16 +236,8 @@ class TurtleMujocoEnv(MujocoEnv):
         first_contact = (self._feet_air_time > 0.0) * contact_filter
         self._feet_air_time += self.dt
 
-        # 阈值与期望速度挂钩。低速时（0.3 m/s）原 0.4s 阈值不可达，导致 r_motion_feet≈0。
-        # 改为：阈值 = 0.1 / speed，截断在 [0.08, 0.3]。
-        #   0.3 m/s → 0.3s   0.5 m/s → 0.2s   1.0 m/s → 0.1s   2.0 m/s → 0.08s
-        # 关键：只奖不罚——使用 np.maximum(0, ...)，避免"短抬脚被惩罚"导致机器人学会"干脆不抬"。
-        target_speed = max(0.1, abs(self._desired_velocity[1]))
-        target_air_time = max(0.08, min(0.3, 0.1 / target_speed))
-        air_time_reward = np.sum(
-            np.maximum(0, self._feet_air_time -
-                       target_air_time) * first_contact
-        )
+        # Award the feets that have just finished their stride (first step with contact)
+        air_time_reward = np.sum((self._feet_air_time - 1.0) * first_contact)
         # No award if the desired velocity is very low (i.e. robot should remain stationary and feet shouldn't move)
         air_time_reward *= np.linalg.norm(self._desired_velocity[:2]) > 0.1
 
@@ -338,61 +245,6 @@ class TurtleMujocoEnv(MujocoEnv):
         self._feet_air_time *= ~contact_filter
 
         return air_time_reward
-
-    @property
-    def diagonal_phase_reward(self):
-        """奖励对角腿异相以打破 PPO 的同步对称偏置。
-
-        物理意义：交替步态 = 任意时刻 2 条对角腿着地、另 2 条腾空。
-        兔跳模式 = 4 条腿相位完全一致（要么同时着地要么同时腾空）。
-        本奖励给"对角异相"打分（每对 0~1，完全异相=1），范围 [0, 1]。
-
-        对角配对的识别在 __init__ 末尾完成：通过 4 条腿 calf 的 xpos 判断前/后/左/右。
-        """
-        # 取出预先识别的对角配对索引
-        fl_idx, fr_idx, rl_idx, rr_idx = self._diag_pair_indices
-
-        def is_contact(body_id):
-            return float(np.linalg.norm(self.data.cfrc_ext[body_id]) > 1.0)
-
-        c_fl = is_contact(self._foot_body_ids[fl_idx])
-        c_fr = is_contact(self._foot_body_ids[fr_idx])
-        c_rl = is_contact(self._foot_body_ids[rl_idx])
-        c_rr = is_contact(self._foot_body_ids[rr_idx])
-
-        # 对角配对是 (FL, RR) 和 (FR, RL)。在 trot 步态下：
-        #   1) FL 和 RR 同步（同相）
-        #   2) FR 和 RL 同步（同相）
-        #   3) (FL,RR) 与 (FR,RL) 反相（一组着地另一组腾空）
-        # 所以"diagonal antiphase" 应判断的是"两组对角的平均接触状态之差"，
-        # 而不是"对角腿之间的接触差"（那样在 trot 下会恒为 0）。
-        diag1_state = 0.5 * (c_fl + c_rr)  # (FL,RR) 对的平均接触 0~1
-        diag2_state = 0.5 * (c_fr + c_rl)  # (FR,RL) 对的平均接触 0~1
-
-        return abs(diag1_state - diag2_state)  # 范围 [0, 1]
-
-    @property
-    def energy_reward(self):
-        # 获取关节扭矩和关节速度 (跳过 root 的 6 个自由度)
-        tau = self.data.qfrc_actuator[6:]
-        qvel = self.data.qvel[6:]
-
-        # 分子：所有关节电机消耗的总功率 (取绝对值)
-        power = np.sum(np.abs(tau) * np.abs(qvel))
-
-        # 分母：仅用「沿期望方向的前进运动」做归一化。
-        # 之前同时把 |vy| 和 |wz| 放进分母，会让原地旋转也把分母撑大、
-        # dot(qvel[:2], desired[:2])：当 qvel 与 desired 同向（即真正在期望方向上
-        # 移动）时为正数。**本模型 -Y 前进，所以 desired[1]=-1，qvel[1]=-1 时
-        # dot = +1**（即前进 1 m/s）。dot<0 时截断为 0，从而错误地激励机器人
-        # "靠转圈刷分"的行为被消除。这里去掉 wz，只奖励真正在期望方向上的有效位移。
-        forward_motion = max(
-            0.0, float(np.dot(self.data.qvel[:2], self._desired_velocity[:2]))
-        )
-
-        denominator = self.sigma_en_x * forward_motion + 0.01
-
-        return np.exp(-power / denominator)
 
     @property
     def healthy_reward(self):
@@ -437,19 +289,7 @@ class TurtleMujocoEnv(MujocoEnv):
 
     @property
     def xy_angular_velocity_cost(self):
-        # 惩罚 roll/pitch/yaw 三个轴的角速度；包含 yaw 是为了防止机器人在原地自转
-        return np.sum(np.square(self.data.qvel[3:6]))
-
-    @property
-    def yaw_drift_cost(self):
-        # 位置型偏航惩罚：偏离 reset 时的初始朝向越大，代价越高。
-        # 使用 (diff+π)%2π-π 把差值包裹到 [-π, π]，避免在 ±π 处跳变。
-        # 与 xy_angular_velocity_cost 互补：后者压制瞬时 yaw 速率，前者压制累计偏航。
-        w, x, y, z = self.data.qpos[3:7]
-        _, _, current_yaw = self.euler_from_quaternion(w, x, y, z)
-        diff = (current_yaw - self._initial_yaw +
-                np.pi) % (2.0 * np.pi) - np.pi
-        return np.square(diff)
+        return np.sum(np.square(self.data.qvel[3:5]))
 
     def action_rate_cost(self, action):
         return np.sum(np.square(self._last_action - action))
@@ -492,19 +332,12 @@ class TurtleMujocoEnv(MujocoEnv):
         feet_air_time_reward = (
             self.feet_air_time_reward * self.reward_weights["feet_airtime"]
         )
-        # 对角异相奖励：，鼓励交替步态
-        diagonal_phase_reward = self.diagonal_phase_reward * self.reward_weights.get(
-            "diagonal_phase", 0.5
-        )
-        r_motion = (
+        rewards = (
             linear_vel_tracking_reward
-            + angular_vel_tracking_reward * self.alpha_ang
+            + angular_vel_tracking_reward
             + healthy_reward
             + feet_air_time_reward
-            + diagonal_phase_reward
         )
-
-        r_en = self.energy_reward
 
         # Negative Costs
         ctrl_cost = self.torque_cost * self.cost_weights["torque"]
@@ -517,23 +350,20 @@ class TurtleMujocoEnv(MujocoEnv):
         xy_angular_vel_cost = (
             self.xy_angular_velocity_cost * self.cost_weights["xy_angular_vel"]
         )
-        joint_limit_cost = self.joint_limit_cost * \
-            self.cost_weights["joint_limit"]
+        joint_limit_cost = self.joint_limit_cost * self.cost_weights["joint_limit"]
         joint_velocity_cost = (
             self.joint_velocity_cost * self.cost_weights["joint_velocity"]
         )
         joint_acceleration_cost = (
             self.acceleration_cost * self.cost_weights["joint_acceleration"]
         )
-        orientation_cost = self.non_flat_base_cost * \
-            self.cost_weights["orientation"]
+        orientation_cost = self.non_flat_base_cost * self.cost_weights["orientation"]
         collision_cost = self.collision_cost * self.cost_weights["collision"]
         default_joint_position_cost = (
             self.default_joint_position_cost
             * self.cost_weights["default_joint_position"]
         )
-        yaw_drift_cost = self.yaw_drift_cost * self.cost_weights["yaw_drift"]
-        r_aux = (
+        costs = (
             ctrl_cost
             + action_rate_cost
             + vertical_vel_cost
@@ -542,46 +372,14 @@ class TurtleMujocoEnv(MujocoEnv):
             + joint_acceleration_cost
             + orientation_cost
             + default_joint_position_cost
-            + yaw_drift_cost
         )
 
-        reward = (r_motion + self.alpha_en * r_en) * \
-            np.exp(-np.clip(r_aux, 0, 1.0))
+        reward = max(0.0, rewards - costs)
         # reward = rewards - self.curriculum_factor * costs
-
-        # 当前偏航量（弧度，包裹到 [-π, π]），用于日志观测
-        _, _, current_yaw = self.euler_from_quaternion(*self.data.qpos[3:7])
-        yaw_diff = float(
-            (current_yaw - self._initial_yaw + np.pi) % (2.0 * np.pi) - np.pi
-        )
         reward_info = {
-            "r_motion": r_motion,
-            # r_motion 各项拆分：linear/angular/feet 的贡献
-            "r_motion_linear": linear_vel_tracking_reward,
-            "r_motion_ang": angular_vel_tracking_reward * self.alpha_ang,
-            "r_motion_feet": feet_air_time_reward,
-            "r_motion_diagonal": diagonal_phase_reward,
-            "diagonal_phase_raw": self.diagonal_phase_reward,  # 原始 0~1 值
-            "r_en": r_en,
-            "r_aux": r_aux,
-            "reward_total": reward,
-            # 偏航相关
-            "yaw_drift_cost": yaw_drift_cost,  # 加权后值
-            "yaw_drift_raw": self.yaw_drift_cost,  # 平方弧度（未加权）
-            "yaw_diff": yaw_diff,  # 当前相对 reset 时累计的偏航量
-            # r_aux 主要成本原始值（未加权），用于看哪一项在拉低奖励
-            "cost_torque_raw": self.torque_cost,
-            "cost_vertical_vel_raw": self.vertical_velocity_cost,
-            "cost_xy_ang_raw": self.xy_angular_velocity_cost,
-            # 物理状态：用于 1.0 m/s 训练时看实际速度和姿态健康度
-            "velocity_y": float(self.data.qvel[1]),  # 实际 -Y 速度（前进为负）
-            "height": float(self.data.qpos[2]),  # 机身高度（健康范围 0.08~0.40）
-            "roll_pitch_max": float(
-                max(abs(self.data.qpos[4]), abs(self.data.qpos[5]))
-            ),  # 最大倾斜角（健康上限 ~0.175 rad ≈ 10°）
-            # Curriculum 状态：当前期望速度与渐进进度（0~1）
-            "curriculum_vy": float(self._desired_velocity[1]),  # 期望前进速度（负值）
-            "curriculum_progress": min(1.0, self._total_env_steps / 3_000_000),
+            "linear_vel_tracking_reward": linear_vel_tracking_reward,
+            "reward_ctrl": -ctrl_cost,
+            "reward_survive": healthy_reward,
         }
 
         return reward, reward_info
@@ -592,8 +390,7 @@ class TurtleMujocoEnv(MujocoEnv):
         # The above seven values are ignored since they are privileged information
         # The remaining values are the joint positions (Turtle has 10 joints)
         # The joint positions are relative to the starting position
-        dofs_position = self.data.qpos[7:].flatten(
-        ) - self.model.key_qpos[0, 7:]
+        dofs_position = self.data.qpos[7:].flatten() - self.model.key_qpos[0, 7:]
 
         # The first three values are the global linear velocity of the robot
         # The second three are the angular velocity of the robot
@@ -634,10 +431,6 @@ class TurtleMujocoEnv(MujocoEnv):
             *self.data.ctrl.shape
         )
 
-        # 记录带噪声后的初始 yaw，作为位置型偏航惩罚的基准
-        w, x, y, z = self.data.qpos[3:7]
-        self._initial_yaw = float(self.euler_from_quaternion(w, x, y, z)[2])
-
         # Reset the variables and sample a new desired velocity
         self._desired_velocity = self._sample_desired_vel()
         self._step = 0
@@ -658,14 +451,10 @@ class TurtleMujocoEnv(MujocoEnv):
         }
 
     def _sample_desired_vel(self):
-        # Curriculum: 期望前进速度从 0.3 m/s 线性渐进到 1.0 m/s，
-        # 在前 3,000,000 个 env 步（按 n_envs=4 大约对应 ~150 次 PPO update）内完成。
-        # 前期低速更容易学会"先稳定 + 抬脚 + 交替"，后期再把速度推到 1 m/s。
-        # 若想禁用 curriculum（直接 1 m/s），把下面三行注释掉、改成：
-        #   return np.array([0.0, -1.0, 0.0])
-        progress = min(1.0, self._total_env_steps / 3_000_000)
-        cur_vy = -0.3 + (-1.0 - -0.3) * progress  # 0.3 → 1.0（-Y 前进）
-        return np.array([0.0, cur_vy, 0.0])
+        desired_vel = np.random.default_rng().uniform(
+            low=self._desired_velocity_min, high=self._desired_velocity_max
+        )
+        return desired_vel
 
     @staticmethod
     def euler_from_quaternion(w, x, y, z):

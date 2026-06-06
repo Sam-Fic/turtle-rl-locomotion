@@ -15,32 +15,6 @@ from tqdm import tqdm
 
 
 class RewardLoggingCallback(BaseCallback):
-    # env 端 reward_info 里除了 r_motion/r_en/r_aux 之外还暴露了这些字段，
-    # 在这里统一登记到 TensorBoard 的 reward/ 命名空间下
-    _EXTRA_KEYS = (
-        # r_motion 拆分
-        "r_motion_linear",
-        "r_motion_ang",
-        "r_motion_feet",
-        "r_motion_diagonal",
-        "diagonal_phase_raw",
-        # 偏航相关
-        "yaw_drift_cost",
-        "yaw_drift_raw",
-        "yaw_diff",
-        # 主要成本原始值
-        "cost_torque_raw",
-        "cost_vertical_vel_raw",
-        "cost_xy_ang_raw",
-        # 物理状态
-        "velocity_y",
-        "height",
-        "roll_pitch_max",
-        # Curriculum 状态
-        "curriculum_vy",
-        "curriculum_progress",
-    )
-
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", [])
         if infos:
@@ -51,10 +25,6 @@ class RewardLoggingCallback(BaseCallback):
             self.logger.record("reward/r_motion", r_motion)
             self.logger.record("reward/r_en", r_en)
             self.logger.record("reward/r_aux", r_aux)
-
-            for k in self._EXTRA_KEYS:
-                v = np.mean([info.get(k, 0.0) for info in infos])
-                self.logger.record(f"reward/{k}", v)
         return True
 
 
@@ -80,10 +50,7 @@ LOG_DIR = "logs"
 def train(args):
     vec_env = make_vec_env(
         TurtleMujocoEnv,
-        env_kwargs={
-            "ctrl_type": args.ctrl_type,
-            "curriculum_start_vy": args.curriculum_start_vy,
-        },
+        env_kwargs={"ctrl_type": args.ctrl_type},
         n_envs=args.num_parallel_envs,
         seed=args.seed,
         vec_env_cls=SubprocVecEnv,
@@ -207,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_parallel_envs",
         type=int,
-        default=12,
+        default=24,
         help="Number of parallel environments while training",
     )
     parser.add_argument(
@@ -253,13 +220,6 @@ if __name__ == "__main__":
         help="Device to use for training (e.g., 'cuda', 'cuda:0', 'cpu').",
     )
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
-        "--curriculum_start_vy",
-        type=float,
-        default=None,
-        help="接续训练时课程期望速度起点（如 -0.35 表示从 0.35 m/s 开始）。"
-             "None = 从头开始（vy 从 -0.3 渐进到 -1.0）。",
-    )
     args = parser.parse_args()
 
     if args.run == "train":
